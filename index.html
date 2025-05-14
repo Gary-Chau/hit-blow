@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>數字密碼破解 - 多人版</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@4.1.1/animate.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary-color: #4CAF50;
+      --secondary-color: #2196F3;
+      --danger-color: #ff5722;
+      --background-gradient: linear-gradient(135deg, #74ebd5 0%, #acb6e5 100%);
+      --card-background: rgba(255, 255, 255, 0.95);
+      --shadow-color: rgba(0, 0, 0, 0.2);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Noto Sans TC', 'Segoe UI', Arial, sans-serif;
+      min-height: 100vh;
+      background: var(--background-gradient);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 0;
+      padding: 20px;
+      color: #333;
+      line-height: 1.6;
+    }
+
+    #app {
+      width: 100%;
+      max-width: 800px;
+      background: var(--card-background);
+      padding: 30px;
+      border-radius: 20px;
+      box-shadow: 0 10px 30px var(--shadow-color);
+      animation: slideIn 0.5s ease-out;
+    }
+
+    h1 {
+      font-size: 2.5em;
+      color: #333;
+      margin-bottom: 20px;
+      text-align: center;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+    }
+
+    h2 {
+      font-size: 1.8em;
+      color: #444;
+      margin: 15px 0;
+    }
+
+    .container {
+      padding: 20px;
+      border-radius: 15px;
+      background: rgba(255, 255, 255, 0.5);
+      margin: 15px 0;
+    }
+
+    input, select {
+      width: 200px;
+      padding: 12px;
+      font-size: 1.2em;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      transition: all 0.3s;
+      margin: 15px 0;
+      font-family: inherit;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 8px rgba(76, 175, 80, 0.3);
+      outline: none;
+    }
+
+    button {
+      padding: 12px 30px;
+      font-size: 1.1em;
+      background: linear-gradient(45deg, var(--primary-color), #66bb6a);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin: 5px;
+      font-family: inherit;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .history {
+      margin-top: 20px;
+      max-height: 300px;
+      overflow-y: auto;
+      padding: 15px;
+      background: rgba(245, 245, 245, 0.8);
+      border-radius: 10px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--primary-color) #f0f0f0;
+    }
+
+    .history::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .history::-webkit-scrollbar-track {
+      background: #f0f0f0;
+      border-radius: 4px;
+    }
+
+    .history::-webkit-scrollbar-thumb {
+      background-color: var(--primary-color);
+      border-radius: 4px;
+    }
+
+    .history-entry {
+      padding: 12px;
+      margin: 8px 0;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      animation: fadeInUp 0.3s ease-in;
+    }
+
+    .message {
+      margin: 15px 0;
+      padding: 10px;
+      font-weight: bold;
+      color: var(--danger-color);
+      text-align: center;
+      background: rgba(255, 87, 34, 0.1);
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+
+    .timer {
+      font-size: 1.8em;
+      font-weight: bold;
+      color: var(--danger-color);
+      text-align: center;
+      margin: 15px 0;
+      padding: 10px;
+      background: rgba(255, 87, 34, 0.1);
+      border-radius: 8px;
+      animation: pulse 1s infinite;
+    }
+
+    .timer.warning {
+      animation: pulse 0.5s infinite;
+    }
+
+    .player-info {
+      font-size: 1.4em;
+      font-weight: bold;
+      color: var(--secondary-color);
+      text-align: center;
+      margin: 15px 0;
+      padding: 10px;
+      background: rgba(33, 150, 243, 0.1);
+      border-radius: 8px;
+    }
+
+    .rules {
+      background: rgba(245, 245, 245, 0.8);
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+
+    .rules p {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+
+    .player-setup {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 20px 0;
+    }
+
+    .player-names {
+      width: 100%;
+      max-width: 500px;
+    }
+
+    .player-name-input {
+      display: flex;
+      align-items: center;
+      margin: 10px 0;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.5);
+      border-radius: 8px;
+    }
+
+    .player-name-input label {
+      width: 120px;
+      font-weight: bold;
+    }
+
+    .player-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--primary-color);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 10px;
+      font-weight: bold;
+    }
+
+    .game-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin: 20px 0;
+    }
+
+    .stat-card {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .guess-input-container {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      align-items: center;
+      margin: 20px 0;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateY(50px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    @keyframes fadeInUp {
+      from { transform: translateY(10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+
+    .confetti {
+      position: fixed;
+      width: 10px;
+      height: 10px;
+      background-color: #f0f0f0;
+      position: absolute;
+      animation: confetti 5s ease-in-out infinite;
+    }
+
+    @keyframes confetti {
+      0% { transform: translateY(0) rotate(0deg); }
+      100% { transform: translateY(100vh) rotate(720deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Start Screen -->
+    <div v-if="screen === 'start'" class="animate__animated animate__fadeIn">
+      <h1>數字密碼破解 - 多人版</h1>
+      
+      <div class="rules container">
+        <h2>遊戲規則</h2>
+        <p>1. 系統會隨機生成一個4位數字密碼（0-9，可能重複）</p>
+        <p>2. 每位玩家輪流猜測密碼</p>
+        <p>3. 每次猜測後，系統會給出結果：</p>
+        <p>   - Hit：數字和位置都正確</p>
+        <p>   - Blow：數字正確但位置錯誤</p>
+        <p>4. 每個玩家有 {{ turnTime }} 秒的時間來猜測</p>
+        <p>5. 如果時間到了還沒猜，會自動換下一位玩家</p>
+        <p>6. 總共有10次猜測機會（所有玩家共用）</p>
+      </div>
+      
+      <div class="player-setup container">
+        <h2>玩家設置</h2>
+        <p>
+          <label>玩家人數：</label>
+          <select v-model.number="playerCount" class="animate__animated animate__fadeIn">
+            <option v-for="n in 4" :value="n">{{ n }} 位玩家</option>
+          </select>
+        </p>
+        
+        <div class="player-names">
+          <div v-for="(name, index) in playerNames" :key="index" 
+               class="player-name-input animate__animated animate__fadeIn"
+               :style="{'animation-delay': index * 0.1 + 's'}">
+            <div class="player-avatar">{{ index + 1 }}</div>
+            <label>玩家 {{ index + 1 }} 名稱：</label>
+            <input v-model="playerNames[index]" :placeholder="`玩家 ${index + 1}`">
+          </div>
+        </div>
+        
+        <p>
+          <label>每回合時間：</label>
+          <select v-model.number="turnTime">
+            <option :value="30">30 秒</option>
+            <option :value="45">45 秒</option>
+            <option :value="60">60 秒</option>
+          </select>
+        </p>
+      </div>
+      
+      <div class="container" style="text-align: center;">
+        <button @click="startGame" class="animate__animated animate__pulse animate__infinite">開始遊戲</button>
+      </div>
+    </div>
+    
+    <!-- Game Screen -->
+    <div v-if="screen === 'game'" class="animate__animated animate__fadeIn">
+      <h1>數字密碼破解</h1>
+
+      <div class="game-stats">
+        <div class="stat-card">
+          <div class="player-info">當前玩家：{{ playerNames[currentPlayerIndex] }}</div>
+        </div>
+        <div class="stat-card">
+          <div class="timer" :class="{ 'warning': timeLeft <= 10 }">剩餘時間：{{ timeLeft }} 秒</div>
+        </div>
+        <div class="stat-card">
+          <div class="attempts-info">剩餘嘗試次數：{{ attemptsLeft }}</div>
+        </div>
+      </div>
+
+      <div class="container">
+        <div class="guess-input-container">
+          <input v-model="guess" 
+                 maxlength="4" 
+                 placeholder="輸入4位數字" 
+                 :disabled="gameOver || timeLeft <= 0"
+                 @keyup.enter="makeGuess"
+                 class="animate__animated"
+                 :class="{'animate__shakeX': invalidInput}">
+          <button @click="makeGuess" 
+                  :disabled="gameOver || timeLeft <= 0"
+                  class="animate__animated animate__pulse animate__infinite">
+            猜！
+          </button>
+        </div>
+        
+        <div class="message" v-if="message">{{ message }}</div>
+        
+        <div class="history">
+          <div v-for="(entry, index) in history" 
+               :key="index" 
+               class="history-entry"
+               :class="{'animate__animated animate__fadeInUp': index === history.length - 1}">
+            {{ entry }}
+          </div>
+        </div>
+      </div>
+
+      <div class="container" style="text-align: center;" v-if="gameOver">
+        <button @click="resetGame" class="animate__animated animate__bounce">再玩一次</button>
+        <button @click="screen = 'start'" class="animate__animated animate__bounce">返回主頁</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+  <script>
+    new Vue({
+      el: '#app',
+      data: {
+        screen: 'start',
+        playerCount: 2,
+        playerNames: ['玩家 1', '玩家 2'],
+        currentPlayerIndex: 0,
+        turnTime: 45,
+        timeLeft: 45,
+        timerInterval: null,
+        guess: '',
+        message: '',
+        history: [],
+        attemptsLeft: 10,
+        gameOver: false,
+        secretCode: '',
+        invalidInput: false,
+        confetti: []
+      },
+      watch: {
+        playerCount(newCount) {
+          this.playerNames = this.playerNames.slice(0, newCount);
+          while (this.playerNames.length < newCount) {
+            this.playerNames.push(`玩家 ${this.playerNames.length + 1}`);
+          }
+        },
+        timeLeft(newValue) {
+          if (newValue <= 10) {
+            this.playTickSound();
+          }
+        }
+      },
+      methods: {
+        startGame() {
+          const emptyNames = this.playerNames.filter(name => !name.trim());
+          if (emptyNames.length > 0) {
+            alert('請為所有玩家輸入名稱！');
+            return;
+          }
+          
+          this.resetGame();
+          this.screen = 'game';
+          this.startTimer();
+        },
+        startTimer() {
+          clearInterval(this.timerInterval);
+          this.timeLeft = this.turnTime;
+          
+          this.timerInterval = setInterval(() => {
+            this.timeLeft--;
+            if (this.timeLeft <= 0) {
+              clearInterval(this.timerInterval);
+              this.timeExpired();
+            }
+          }, 1000);
+        },
+        timeExpired() {
+          this.playSound('timeout');
+          this.history.push(`${this.playerNames[this.currentPlayerIndex]} 超時了！`);
+          this.nextPlayer();
+        },
+        nextPlayer() {
+          this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.playerCount;
+          this.guess = '';
+          if (!this.gameOver) {
+            this.message = `輪到 ${this.playerNames[this.currentPlayerIndex]} 了！`;
+            this.startTimer();
+          }
+        },
+        generateSecretCode() {
+          let code = '';
+          for (let i = 0; i < 4; i++) {
+            code += Math.floor(Math.random() * 10);
+          }
+          return code;
+        },
+        makeGuess() {
+          if (this.gameOver || this.timeLeft <= 0) return;
+
+          const guess = this.guess.trim();
+          if (!/^\d{4}$/.test(guess)) {
+            this.invalidInput = true;
+            this.message = '請輸入4位數字！';
+            setTimeout(() => {
+              this.invalidInput = false;
+            }, 1000);
+            this.playSound('error');
+            return;
+          }
+
+          this.attemptsLeft--;
+          const result = this.checkGuess(guess);
+          const currentPlayer = this.playerNames[this.currentPlayerIndex];
+          const entry = `${currentPlayer} 猜：${guess} - ${result.hit} Hit, ${result.blow} Blow`;
+          this.history.push(entry);
+
+          if (result.hit === 4) {
+            this.playSound('win');
+            this.message = `恭喜 ${currentPlayer}！破解了密碼：${this.secretCode}`;
+            this.createConfetti();
+            this.endGame();
+            return;
+          }
+
+          if (this.attemptsLeft === 0) {
+            this.playSound('gameover');
+            this.message = `遊戲結束！密碼是：${this.secretCode}`;
+            this.endGame();
+            return;
+          }
+
+          this.playSound('guess');
+          this.message = `還剩 ${this.attemptsLeft} 次機會`;
+          this.nextPlayer();
+        },
+        checkGuess(guess) {
+          let hit = 0;
+          let blow = 0;
+          const secretArray = this.secretCode.split('');
+          const guessArray = guess.split('');
+          const secretCount = {};
+          const guessCount = {};
+
+          for (let i = 0; i < 4; i++) {
+            if (guessArray[i] === secretArray[i]) {
+              hit++;
+            } else {
+              secretCount[secretArray[i]] = (secretCount[secretArray[i]] || 0) + 1;
+              guessCount[guessArray[i]] = (guessCount[guessArray[i]] || 0) + 1;
+            }
+          }
+
+          for (const num in guessCount) {
+            if (secretCount[num]) {
+              blow += Math.min(guessCount[num], secretCount[num]);
+            }
+          }
+
+          return { hit, blow };
+        },
+        endGame() {
+          this.gameOver = true;
+          clearInterval(this.timerInterval);
+        },
+        resetGame() {
+          this.secretCode = this.generateSecretCode();
+          this.attemptsLeft = 10;
+          this.gameOver = false;
+          this.guess = '';
+          this.message = '';
+          this.history = [];
+          this.currentPlayerIndex = 0;
+          clearInterval(this.timerInterval);
+          if (this.screen === 'game') {
+            this.startTimer();
+          }
+        },
+        playSound(type) {
+          // 這裡可以添加音效，如果需要的話
+          const sounds = {
+            guess: 'path/to/guess-sound.mp3',
+            win: 'path/to/win-sound.mp3',
+            error: 'path/to/error-sound.mp3',
+            timeout: 'path/to/timeout-sound.mp3',
+            gameover: 'path/to/gameover-sound.mp3'
+          };
+        },
+        createConfetti() {
+          // 勝利時的五彩紙屑效果
+          for (let i = 0; i < 50; i++) {
+            const confetti = document.createElement('div');
+            confetti.className = 'confetti';
+            confetti.style.left = Math.random() * window.innerWidth + 'px';
+            confetti.style.backgroundColor = `hsl(${Math.random() * 360}, 100%, 50%)`;
+            confetti.style.animationDelay = Math.random() * 3 + 's';
+            document.body.appendChild(confetti);
+            
+            setTimeout(() => {
+              confetti.remove();
+            }, 5000);
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>
