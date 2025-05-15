@@ -14,6 +14,15 @@ function generateRoomId() {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
+// 生成4位數字密碼（用於單人模式）
+function generateSecretCode() {
+    let code = '';
+    for (let i = 0; i < 4; i++) {
+        code += Math.floor(Math.random() * 10);
+    }
+    return code;
+}
+
 // 獲取公開房間列表
 function getPublicRooms() {
     const publicRooms = [];
@@ -54,14 +63,18 @@ io.on('connection', (socket) => {
                 name: playerName,
                 ready: false,
                 secretCode: '',
-                targetPlayerId: ''
+                targetPlayerId: '',
+                startTime: 0,
+                endTime: 0,
+                rounds: 0
             }],
             gameState: {
                 started: false,
                 currentPlayer: 0,
                 attempts: [],
                 timeLeft: turnTime,
-                winners: []
+                winners: [],
+                isSinglePlayer: false
             },
             settings: {
                 turnTime: turnTime || 45,
@@ -102,7 +115,10 @@ io.on('connection', (socket) => {
             name: playerName,
             ready: false,
             secretCode: '',
-            targetPlayerId: ''
+            targetPlayerId: '',
+            startTime: 0,
+            endTime: 0,
+            rounds: 0
         });
 
         socket.join(roomId);
@@ -124,21 +140,39 @@ io.on('connection', (socket) => {
 
         player.ready = true;
         player.secretCode = secretCode;
-        player.targetPlayerId = targetPlayerId;
+        
+        // 單人模式檢測
+        if (room.players.length === 1) {
+            room.gameState.isSinglePlayer = true;
+            // 在單人模式中，目標ID是"computer"
+            player.targetPlayerId = "computer";
+            // 生成一個隨機密碼給玩家猜
+            room.computerCode = generateSecretCode();
+            console.log(`單人模式啟動，計算機密碼: ${room.computerCode}`);
+        } else {
+            player.targetPlayerId = targetPlayerId;
+        }
         
         // 檢查是否所有玩家都準備好了
         const allReady = room.players.every(p => p.ready);
         
-        if (allReady && room.players.length >= 2) {
+        if (allReady && (room.players.length >= 2 || room.gameState.isSinglePlayer)) {
             room.gameState.started = true;
             
-            // 分配每個玩家的目標（被猜測者）
-            room.players.forEach((player) => {
-                const targetPlayer = room.players.find(p => p.id === player.targetPlayerId);
-                if (targetPlayer) {
-                    console.log(`${player.name} 將猜測 ${targetPlayer.name} 設置的密碼`);
-                }
+            // 記錄每個玩家的開始時間
+            room.players.forEach(p => {
+                p.startTime = Date.now();
             });
+            
+            // 分配每個玩家的目標（被猜測者）
+            if (!room.gameState.isSinglePlayer) {
+                room.players.forEach((player) => {
+                    const targetPlayer = room.players.find(p => p.id === player.targetPlayerId);
+                    if (targetPlayer) {
+                        console.log(`${player.name} 將猜測 ${targetPlayer.name} 設置的密碼`);
+                    }
+                });
+            }
             
             io.to(roomId).emit('gameStart', { room });
             startGameTimer(roomId);
@@ -158,53 +192,98 @@ io.on('connection', (socket) => {
             return;
         }
 
-        const targetPlayer = room.players.find(p => p.id === targetPlayerId);
-        if (!targetPlayer) {
-            socket.emit('error', '目標玩家不存在');
-            return;
+        // 增加玩家猜測回合數
+        currentPlayer.rounds++;
+        
+        let result;
+        let targetPlayerName;
+        
+        // 單人模式下的猜測處理
+        if (room.gameState.isSinglePlayer) {
+            result = checkGuess(guess, room.computerCode);
+            targetPlayerName = "電腦";
+            targetPlayerId = "computer";
+        } else {
+            // 多人模式猜測處理
+            const targetPlayer = room.players.find(p => p.id === targetPlayerId);
+            if (!targetPlayer) {
+                socket.emit('error', '目標玩家不存在');
+                return;
+            }
+            result = checkGuess(guess, targetPlayer.secretCode);
+            targetPlayerName = targetPlayer.name;
         }
-
-        const result = checkGuess(guess, targetPlayer.secretCode);
+        
         const attempt = {
             playerId: socket.id,
             playerName: currentPlayer.name,
             targetPlayerId: targetPlayerId,
-            targetPlayerName: targetPlayer.name,
+            targetPlayerName: targetPlayerName,
             guess,
-            result
+            result,
+            round: currentPlayer.rounds
         };
         
         room.gameState.attempts.push(attempt);
 
         if (result.hit === 4) {
-            // 猜對了，標記為勝利者
+            // 猜對了，標記為勝利者並記錄完成時間
             if (!room.gameState.winners.includes(currentPlayer.id)) {
                 room.gameState.winners.push(currentPlayer.id);
+                currentPlayer.endTime = Date.now();
+                
+                // 計算總耗時（毫秒）
+                currentPlayer.totalTime = currentPlayer.endTime - currentPlayer.startTime;
             }
             
-            // 檢查是否所有玩家都猜出了密碼或只剩一名玩家未猜出
+            // 單人模式時直接結束遊戲
+            if (room.gameState.isSinglePlayer) {
+                io.to(roomId).emit('gameOver', { 
+                    room,
+                    winners: [currentPlayer],
+                    isSinglePlayer: true
+                });
+                return;
+            }
+            
+            // 多人模式檢查是否所有玩家都猜出了密碼
             const remainingPlayers = room.players.filter(p => 
                 !room.gameState.winners.includes(p.id) && 
                 room.players.some(target => target.targetPlayerId === p.id)
             );
             
-            if (remainingPlayers.length <= 1) {
+            if (remainingPlayers.length === 0) {
+                // 排序獲勝者（按回合數和用時）
+                const sortedWinners = room.gameState.winners
+                    .map(id => room.players.find(p => p.id === id))
+                    .sort((a, b) => {
+                        // 首先按回合數排序
+                        if (a.rounds !== b.rounds) {
+                            return a.rounds - b.rounds;
+                        }
+                        // 回合數相同則按用時排序
+                        return a.totalTime - b.totalTime;
+                    });
+                
                 // 遊戲結束
                 io.to(roomId).emit('gameOver', { 
                     room,
-                    winners: room.gameState.winners.map(id => room.players.find(p => p.id === id))
+                    winners: sortedWinners,
+                    isSinglePlayer: room.gameState.isSinglePlayer
                 });
                 return;
             }
         }
 
         // 繼續遊戲，輪到下一位玩家
-        do {
-            room.gameState.currentPlayer = (room.gameState.currentPlayer + 1) % room.players.length;
-            currentPlayer = room.players[room.gameState.currentPlayer];
-            // 跳過已經猜對的玩家
-        } while (room.gameState.winners.includes(currentPlayer.id) && 
-                room.gameState.winners.length < room.players.length);
+        if (!room.gameState.isSinglePlayer) { // 多人模式才需要切換玩家
+            do {
+                room.gameState.currentPlayer = (room.gameState.currentPlayer + 1) % room.players.length;
+                currentPlayer = room.players[room.gameState.currentPlayer];
+                // 跳過已經猜對的玩家
+            } while (room.gameState.winners.includes(currentPlayer.id) && 
+                    room.gameState.winners.length < room.players.length);
+        }
 
         io.to(roomId).emit('turnUpdate', { room, attempt });
         resetTurnTimer(roomId);
@@ -220,6 +299,9 @@ io.on('connection', (socket) => {
             player.ready = false;
             player.secretCode = '';
             player.targetPlayerId = '';
+            player.startTime = 0;
+            player.endTime = 0;
+            player.rounds = 0;
         });
         
         room.gameState = {
@@ -227,8 +309,14 @@ io.on('connection', (socket) => {
             currentPlayer: 0,
             attempts: [],
             timeLeft: room.settings.turnTime,
-            winners: []
+            winners: [],
+            isSinglePlayer: false
         };
+        
+        // 單人模式下重置電腦密碼
+        if (room.computerCode) {
+            delete room.computerCode;
+        }
         
         io.to(roomId).emit('gameRestarted', { room });
     });
@@ -346,22 +434,39 @@ function handleTimeOut(roomId) {
 
     const currentPlayer = room.players[room.gameState.currentPlayer];
     
+    // 增加回合數
+    currentPlayer.rounds++;
+    
+    let targetPlayerName = "未知";
+    if (room.gameState.isSinglePlayer) {
+        targetPlayerName = "電腦";
+    } else {
+        const targetPlayer = room.players.find(p => p.id === currentPlayer.targetPlayerId);
+        if (targetPlayer) {
+            targetPlayerName = targetPlayer.name;
+        }
+    }
+    
     room.gameState.attempts.push({
         playerId: currentPlayer.id,
         playerName: currentPlayer.name,
         targetPlayerId: currentPlayer.targetPlayerId,
-        targetPlayerName: room.players.find(p => p.id === currentPlayer.targetPlayerId)?.name || '未知',
+        targetPlayerName: targetPlayerName,
         guess: '超時',
-        result: { hit: 0, blow: 0 }
+        result: { hit: 0, blow: 0 },
+        round: currentPlayer.rounds
     });
 
-    // 輪到下一位玩家
-    do {
-        room.gameState.currentPlayer = (room.gameState.currentPlayer + 1) % room.players.length;
-        currentPlayer = room.players[room.gameState.currentPlayer];
-        // 跳過已經猜對的玩家
-    } while (room.gameState.winners.includes(currentPlayer.id) && 
-            room.gameState.winners.length < room.players.length);
+    // 單人模式不需要切換玩家
+    if (!room.gameState.isSinglePlayer) {
+        // 輪到下一位玩家
+        do {
+            room.gameState.currentPlayer = (room.gameState.currentPlayer + 1) % room.players.length;
+            currentPlayer = room.players[room.gameState.currentPlayer];
+            // 跳過已經猜對的玩家
+        } while (room.gameState.winners.includes(currentPlayer.id) && 
+                room.gameState.winners.length < room.players.length);
+    }
 
     io.to(roomId).emit('turnUpdate', { room });
     resetTurnTimer(roomId);
