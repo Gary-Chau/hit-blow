@@ -13,15 +13,59 @@
         <!-- 登入畫面 -->
         <div v-if="screen === 'login'" class="container animate__animated animate__fadeIn">
             <h1>數字密碼破解</h1>
+            <div class="rules-container">
+                <h2>遊戲規則</h2>
+                <p>1. 每位玩家設置一個4位數字密碼</p>
+                <p>2. 每位玩家選擇要猜測哪位玩家的密碼</p>
+                <p>3. 玩家輪流猜測對方的密碼</p>
+                <p>4. 每次猜測後，系統會給出結果：</p>
+                <p>   - Hit：數字和位置都正確</p>
+                <p>   - Blow：數字正確但位置錯誤</p>
+                <p>5. 最先猜中對方密碼的玩家獲勝</p>
+            </div>
             <div class="login-form">
                 <input v-model="playerName" 
-                       placeholder="輸入你的名字" 
-                       @keyup.enter="createOrJoinRoom">
+                      placeholder="輸入你的名字" 
+                      @keyup.enter="showLobby">
                 <div class="button-group">
                     <button @click="showCreateRoom" 
                             class="primary-button">創建房間</button>
+                    <button @click="showLobby" 
+                            class="primary-button">公開房間</button>
                     <button @click="showJoinRoom" 
                             class="secondary-button">加入房間</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 房間大廳畫面 -->
+        <div v-if="screen === 'lobby'" class="container animate__animated animate__fadeIn">
+            <h2>公開房間列表</h2>
+            <div class="lobby-controls">
+                <button @click="refreshRoomList" class="secondary-button">
+                    刷新列表
+                </button>
+                <button @click="screen = 'login'" class="secondary-button">
+                    返回
+                </button>
+            </div>
+
+            <div class="room-list">
+                <div v-if="publicRooms.length === 0" class="empty-room-message">
+                    目前沒有公開房間，請創建一個新房間！
+                </div>
+                <div v-for="room in publicRooms" 
+                     :key="room.id" 
+                     class="room-item animate__animated animate__fadeIn">
+                    <div class="room-details">
+                        <h3>{{ room.name }}</h3>
+                        <p>玩家數量: {{ room.players }}/{{ room.maxPlayers }}</p>
+                        <p>房主: {{ room.host }}</p>
+                    </div>
+                    <button @click="joinRoom(room.id)" 
+                            class="primary-button">
+                        加入房間
+                    </button>
                 </div>
             </div>
         </div>
@@ -31,14 +75,31 @@
             <h2>創建新房間</h2>
             <div class="room-settings">
                 <div class="setting-item">
+                    <label>房間名稱：</label>
+                    <input v-model="roomName" :placeholder="`${playerName}的房間`">
+                </div>
+                <div class="setting-item">
+                    <label>房間類型：</label>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" v-model="isPublic" :value="true">
+                            公開
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" v-model="isPublic" :value="false">
+                            私人
+                        </label>
+                    </div>
+                </div>
+                <div class="setting-item">
                     <label>最大玩家數：</label>
-                    <select v-model="maxPlayers">
+                    <select v-model.number="maxPlayers">
                         <option v-for="n in 3" :value="n+2">{{ n+2 }} 位玩家</option>
                     </select>
                 </div>
                 <div class="setting-item">
                     <label>回合時間：</label>
-                    <select v-model="turnTime">
+                    <select v-model.number="turnTime">
                         <option :value="30">30 秒</option>
                         <option :value="45">45 秒</option>
                         <option :value="60">60 秒</option>
@@ -59,9 +120,9 @@
             <div class="join-form">
                 <input v-model="roomId" 
                        placeholder="輸入房間代碼" 
-                       @keyup.enter="joinRoom">
+                       @keyup.enter="joinRoom()">
                 <div class="button-group">
-                    <button @click="joinRoom" 
+                    <button @click="joinRoom()" 
                             class="primary-button">加入</button>
                     <button @click="screen = 'login'" 
                             class="secondary-button">返回</button>
@@ -70,8 +131,13 @@
         </div>
 
         <!-- 等待室畫面 -->
-        <div v-if="screen === 'lobby'" class="container animate__animated animate__fadeIn">
+        <div v-if="screen === 'waitingRoom'" class="container animate__animated animate__fadeIn">
             <h2>房間：{{ currentRoom.id }}</h2>
+            <div class="copy-code">
+                <span>分享此代碼給朋友加入：</span>
+                <code>{{ currentRoom.id }}</code>
+            </div>
+            
             <div class="lobby-info">
                 <div class="player-list">
                     <h3>玩家列表</h3>
@@ -84,12 +150,49 @@
                     </div>
                 </div>
                 <div class="room-info">
+                    <p>房間類型：{{ currentRoom.isPublic ? '公開' : '私人' }}</p>
                     <p>最大玩家數：{{ currentRoom.settings.maxPlayers }}</p>
                     <p>回合時間：{{ currentRoom.settings.turnTime }} 秒</p>
                 </div>
             </div>
+            
+            <div class="setup-section" v-if="!isReady">
+                <h3>設置你的密碼</h3>
+                <div class="secret-input">
+                    <input 
+                        v-model="secretCode" 
+                        maxlength="4" 
+                        placeholder="輸入4位數字密碼"
+                        type="password"
+                        class="animate__animated"
+                        :class="{'animate__shakeX': invalidInput}">
+                </div>
+                
+                <h3>選擇你要猜測的玩家</h3>
+                <div class="target-selection" v-if="otherPlayers.length > 0">
+                    <div 
+                        v-for="player in otherPlayers"
+                        :key="player.id"
+                        class="target-player"
+                        :class="{'selected': targetPlayerId === player.id}"
+                        @click="targetPlayerId = player.id">
+                        {{ player.name }}
+                    </div>
+                </div>
+                <div v-else class="waiting-message">
+                    等待其他玩家加入...
+                </div>
+            </div>
+            
+            <div class="player-ready-info" v-if="isReady">
+                <h3>你已準備完成</h3>
+                <p>你的密碼：<span class="secret-display">****</span></p>
+                <p>你將猜測：{{ getMyTargetName() }}</p>
+                <p>等待其他玩家準備...</p>
+            </div>
+            
             <div class="button-group">
-                <button v-if="!isReady" 
+                <button v-if="!isReady && otherPlayers.length > 0" 
                         @click="playerReady" 
                         class="primary-button">準備</button>
                 <button @click="leaveRoom" 
@@ -112,41 +215,55 @@
                             剩餘時間：{{ currentRoom.gameState.timeLeft }} 秒
                         </div>
                     </div>
-                    <div class="stat-card">
-                        <div class="attempts-info">
-                            剩餘嘗試次數：{{ currentRoom.gameState.attemptsLeft }}
-                        </div>
+                </div>
+            </div>
+            
+            <div class="player-status-section">
+                <h3>玩家狀態</h3>
+                <div class="player-status-list">
+                    <div 
+                        v-for="player in currentRoom.players"
+                        :key="player.id"
+                        class="player-status"
+                        :class="getPlayerStatusClass(player.id)">
+                        {{ player.name }}
+                        <span v-if="currentRoom.gameState.winners.includes(player.id)" class="winner-tag">
+                            已猜中
+                        </span>
                     </div>
                 </div>
             </div>
 
             <div class="game-content">
-                <div class="guess-input-container" v-if="isCurrentPlayer">
+                <div class="game-info">
+                    <p>你的目標：猜出 {{ myTarget ? myTarget.name : '?' }} 的密碼</p>
+                    <p v-if="amIWinner" class="success-message">恭喜你已經猜中了密碼！</p>
+                </div>
+                
+                <div class="guess-input-container" v-if="isCurrentPlayer && !amIWinner">
                     <input v-model="guess" 
                            maxlength="4" 
                            placeholder="輸入4位數字" 
-                           :disabled="!isCurrentPlayer"
                            @keyup.enter="makeGuess"
                            class="animate__animated"
                            :class="{'animate__shakeX': invalidInput}">
                     <button @click="makeGuess" 
-                            :disabled="!isCurrentPlayer"
                             class="primary-button">
                         猜！
                     </button>
                 </div>
 
-                <div v-else class="waiting-message">
+                <div v-else-if="!amIWinner" class="waiting-message">
                     等待 {{ currentRoom.players[currentRoom.gameState.currentPlayer].name }} 的回合
                 </div>
 
                 <div class="history">
+                    <h3>遊戲歷史</h3>
                     <div v-for="(attempt, index) in currentRoom.gameState.attempts" 
                          :key="index" 
                          class="history-entry"
                          :class="{'animate__animated animate__fadeInUp': index === currentRoom.gameState.attempts.length - 1}">
-                        {{ attempt.playerName }} 猜：{{ attempt.guess }} 
-                        - {{ attempt.result.hit }} Hit, {{ attempt.result.blow }} Blow
+                        {{ formatAttempt(attempt) }}
                     </div>
                 </div>
             </div>
@@ -156,13 +273,25 @@
         <div v-if="screen === 'gameOver'" class="container animate__animated animate__fadeIn">
             <h2>遊戲結束！</h2>
             <div class="game-result">
-                <p v-if="winner">
-                    恭喜 {{ winner.name }} 獲勝！
-                </p>
-                <p v-else>
-                    遊戲結束，沒有人猜中密碼。
-                </p>
-                <p>正確答案是：{{ secretCode }}</p>
+                <div v-if="winners && winners.length > 0">
+                    <h3>恭喜獲勝者：</h3>
+                    <div class="winners-list">
+                        <div v-for="winner in winners" :key="winner.id" class="winner-item">
+                            {{ winner.name }}
+                        </div>
+                    </div>
+                </div>
+                <div v-else>
+                    <p>遊戲結束，沒有人猜中密碼。</p>
+                </div>
+            </div>
+            <div class="results-summary">
+                <h3>所有密碼：</h3>
+                <div class="secret-codes-list">
+                    <div v-for="player in currentRoom.players" :key="player.id" class="secret-code-item">
+                        {{ player.name }}: {{ player.secretCode }}
+                    </div>
+                </div>
             </div>
             <div class="button-group">
                 <button @click="restartGame" 
